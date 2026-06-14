@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOT 4H — Scanner</title>
+<style>
+  :root {
+    --bg: #0a0d12;
+    --surface: #111621;
+    --border: #1e2535;
+    --text: #c8d0e0;
+    --muted: #4a5568;
+    --buy: #00e89b;
+    --sell: #ff4d6d;
+    --neutral: #f0c040;
+    --accent: #3d7fff;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --font-ui: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 13px; min-height: 100vh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: var(--font-mono); font-size: 15px; font-weight: 700; letter-spacing: 0.08em; color: #fff; }
+  .logo span { color: var(--accent); }
+  .status-bar { display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 5px; }
+  .dot.live { background: var(--buy); box-shadow: 0 0 6px var(--buy); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+  #scan-btn {
+    background: var(--accent); color: #fff; border: none; padding: 8px 18px;
+    border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+    letter-spacing: 0.04em; transition: opacity 0.2s;
+  }
+  #scan-btn:hover { opacity: 0.85; }
+  #scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .proxy-bar {
+    background: #0d1520; border-bottom: 1px solid var(--border);
+    padding: 8px 24px; font-size: 11px; color: var(--muted);
+    font-family: var(--font-mono); display: flex; align-items: center; gap: 12px;
+  }
+  .proxy-bar select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono);
+  }
+  .proxy-label { color: #3d7fff; }
+
+  .main { padding: 20px 24px; }
+
+  .summary { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; min-width: 120px; }
+  .stat-card .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .stat-card .value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: #fff; }
+  .stat-card .value.buy { color: var(--buy); }
+  .stat-card .value.sell { color: var(--sell); }
+
+  .grid-header {
+    display: grid;
+    grid-template-columns: 80px 90px 70px 75px 110px 55px 55px 80px 110px;
+    gap: 0; padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px; font-family: var(--font-mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  #results { margin-top: 2px; }
+  .row {
+    display: grid;
+    grid-template-columns: 80px 90px 70px 75px 110px 55px 55px 80px 110px;
+    gap: 0; padding: 10px 12px; border-bottom: 1px solid var(--border);
+    align-items: center; transition: background 0.15s;
+  }
+  .row:hover { background: #13192a; }
+  .row.signal-buy  { border-left: 3px solid var(--buy); }
+  .row.signal-sell { border-left: 3px solid var(--sell); }
+  .row.signal-none { border-left: 3px solid transparent; padding-left: 9px; }
+
+  .pair { font-family: var(--font-mono); font-weight: 700; font-size: 12px; color: #fff; }
+  .price { font-family: var(--font-mono); font-size: 11px; color: #fff; }
+  .trend-bull { color: var(--buy); font-size: 10px; font-family: var(--font-mono); }
+  .trend-bear { color: var(--sell); font-size: 10px; font-family: var(--font-mono); }
+
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; font-family: var(--font-mono); letter-spacing: 0.06em; }
+  .badge.buy  { background: rgba(0,232,155,.12); color: var(--buy);  border: 1px solid rgba(0,232,155,.3); }
+  .badge.sell { background: rgba(255,77,109,.12); color: var(--sell); border: 1px solid rgba(255,77,109,.3); }
+  .badge.wait { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+
+  .val { font-family: var(--font-mono); font-size: 11px; }
+  .val.ok      { color: var(--buy); }
+  .val.warn    { color: var(--sell); }
+  .val.neutral { color: var(--text); }
+
+  .tp-info { font-family: var(--font-mono); font-size: 10px; color: var(--muted); line-height: 1.7; margin-top: 3px; }
+  .tp-info .tp1 { color: var(--neutral); }
+  .tp-info .tp2 { color: var(--buy); }
+  .tp-info .sl  { color: var(--sell); }
+
+  .cond-dots { display: flex; gap: 3px; flex-wrap: wrap; }
+  .cond-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--border); }
+  .cond-dot.met      { background: var(--buy); }
+  .cond-dot.sell-met { background: var(--sell); }
+
+  .loading-row { text-align: center; padding: 40px; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; margin-right:8px; vertical-align:middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-cell { color: var(--sell); font-family: var(--font-mono); font-size: 10px; }
+
+  .log-panel { margin-top: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .log-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-family: var(--font-mono); display: flex; justify-content: space-between; align-items: center; }
+  #log { height: 140px; overflow-y: auto; padding: 10px 14px; font-family: var(--font-mono); font-size: 11px; line-height: 1.8; color: var(--muted); }
+  #log .entry.info { color: var(--text); }
+  #log .entry.buy  { color: var(--buy); }
+  #log .entry.sell { color: var(--sell); }
+  #log .entry.warn { color: var(--neutral); }
+  #log .ts { color: #2a3350; margin-right: 8px; }
+
+  .proxy-status { font-size: 10px; }
+  .proxy-status.ok   { color: var(--buy); }
+  .proxy-status.fail { color: var(--sell); }
+
+  .alert-banner {
+    background: rgba(240,192,64,.08); border: 1px solid rgba(240,192,64,.25);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 16px;
+    font-size: 11px; color: var(--neutral); font-family: var(--font-mono); display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BOT<span>4H</span></div>
+  <div class="status-bar">
+    <span id="status-dot" class="dot"></span>
+    <span id="status-txt">Listo</span>
+    <span id="last-scan"></span>
+  </div>
+  <button id="scan-btn" onclick="runScan()">▶ Escanear</button>
+</header>
+
+<div class="proxy-bar">
+  <span class="proxy-label">PROXY CORS:</span>
+  <select id="proxy-sel" onchange="setProxy(this.value)">
+    <option value="corsproxy">corsproxy.io (recomendado)</option>
+    <option value="allorigins">allorigins.win</option>
+    <option value="direct">Sin proxy (puede fallar)</option>
+  </select>
+  <span id="proxy-status" class="proxy-status"></span>
+</div>
+
+<div class="main">
+  <div id="alert-banner" class="alert-banner">
+    ⚠ Error de conexión. El proxy CORS no respondió. Prueba con otro proxy del selector arriba o abre este archivo directamente en tu navegador.
+  </div>
+
+  <div class="summary">
+    <div class="stat-card"><div class="label">Señales BUY</div><div class="value buy" id="cnt-buy">—</div></div>
+    <div class="stat-card"><div class="label">Señales SELL</div><div class="value sell" id="cnt-sell">—</div></div>
+    <div class="stat-card"><div class="label">Pares OK</div><div class="value" id="cnt-total">—</div></div>
+    <div class="stat-card"><div class="label">Filtros activos</div><div class="value" id="cnt-filter">—</div></div>
+  </div>
+
+  <div class="grid-header">
+    <div>PAR</div><div>PRECIO</div><div>TEND.</div>
+    <div>RSI(14)</div><div>STOCH K/D</div>
+    <div>VOL</div><div>ATR</div><div>CONDS</div><div>SEÑAL / TP</div>
+  </div>
+  <div id="results">
+    <div class="loading-row">Presiona <strong>Escanear</strong> para analizar los 10 pares en 4H</div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-header">
+      <span>LOG DEL SISTEMA</span>
+      <span onclick="clearLog()" style="cursor:pointer;color:var(--muted);font-size:10px;">limpiar</span>
+    </div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const PAIRS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','SUIUSDT','ADAUSDT','XRPUSDT','DOTUSDT','LINKUSDT','AVAXUSDT'];
+const INTERVAL = '4h';
+const BINANCE_BASE = 'https://api.binance.com/api/v3';
+
+const PROXIES = {
+  corsproxy: url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  allorigins: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  direct: url => url
+};
+
+let currentProxy = 'corsproxy';
+let scanning = false;
+
+function setProxy(val) { currentProxy = val; log(`Proxy cambiado a: ${val}`, 'warn'); }
+
+async function bFetch(path) {
+  const url = `${BINANCE_BASE}${path}`;
+  const proxyUrl = PROXIES[currentProxy](url);
+  const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function log(msg, type='info') {
+  const el = document.getElementById('log');
+  const ts = new Date().toLocaleTimeString('es',{hour12:false});
+  const span = document.createElement('span');
+  span.className = `entry ${type}`;
+  span.innerHTML = `<span class="ts">[${ts}]</span>${msg}<br>`;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+function setStatus(txt, live=false) {
+  document.getElementById('status-txt').textContent = txt;
+  document.getElementById('status-dot').className = 'dot' + (live?' live':'');
+}
+
+// ── Indicadores ──────────────────────────────────────────────
+function ema(data, p) {
+  const k = 2/(p+1); let prev = data.slice(0,p).reduce((a,b)=>a+b,0)/p;
+  const out = new Array(p-1).fill(null); out.push(prev);
+  for (let i=p;i<data.length;i++){prev=data[i]*k+prev*(1-k);out.push(prev);}
+  return out;
+}
+
+function calcRSI(c, p=14) {
+  let g=0,l=0;
+  for(let i=c.length-p;i<c.length;i++){const d=c[i]-c[i-1];if(d>0)g+=d;else l-=d;}
+  g/=p;l/=p;
+  if(l===0)return 100;
+  return 100-100/(1+g/l);
+}
+
+function calcStoch(H,L,C,kp=14,dp=3){
+  const rawK=[];
+  for(let i=kp-1;i<C.length;i++){
+    const hh=Math.max(...H.slice(i-kp+1,i+1));
+    const ll=Math.min(...L.slice(i-kp+1,i+1));
+    rawK.push(hh===ll?50:(C[i]-ll)/(hh-ll)*100);
+  }
+  const smK=[];
+  for(let i=dp-1;i<rawK.length;i++) smK.push(rawK.slice(i-dp+1,i+1).reduce((a,b)=>a+b,0)/dp);
+  const smD=[];
+  for(let i=dp-1;i<smK.length;i++) smD.push(smK.slice(i-dp+1,i+1).reduce((a,b)=>a+b,0)/dp);
+  const n=smK.length, m=smD.length;
+  return {K:smK[n-1],Kp:smK[n-2],D:smD[m-1],Dp:smD[m-2]};
+}
+
+function atrSeries(H,L,C,p=14){
+  const tr=[];
+  for(let i=1;i<C.length;i++) tr.push(Math.max(H[i]-L[i],Math.abs(H[i]-C[i-1]),Math.abs(L[i]-C[i-1])));
+  const out=[];
+  for(let i=p-1;i<tr.length;i++) out.push(tr.slice(i-p+1,i+1).reduce((a,b)=>a+b,0)/p);
+  return out;
+}
+
+function findSR(H,L,maxDist=0.01,minT=3){
+  const pts=[...H,...L]; const used=new Set(); const zones=[];
+  for(let i=0;i<pts.length;i++){
+    if(used.has(i))continue;
+    const base=pts[i]; const gr=[base]; const idx=[i];
+    for(let j=i+1;j<pts.length;j++){
+      if(!used.has(j)&&Math.abs(pts[j]-base)/base<=maxDist){gr.push(pts[j]);idx.push(j);}
+    }
+    if(gr.length>=minT){
+      zones.push({price:gr.reduce((a,b)=>a+b,0)/gr.length,touches:gr.length});
+      idx.forEach(x=>used.add(x));
+    }
+  }
+  return zones;
+}
+
+function hasWick(o,h,l,c,type){
+  const body=Math.abs(c-o); if(body===0)return false;
+  if(type==='buy') return (Math.min(o,c)-l)>=2*body;
+  return (h-Math.max(o,c))>=2*body;
+}
+
+// ── Análisis por par ──────────────────────────────────────────
+async function analyze(symbol){
+  const klines = await bFetch(`/klines?symbol=${symbol}&interval=${INTERVAL}&limit=310`);
+  const O=klines.map(k=>+k[1]),H=klines.map(k=>+k[2]),L=klines.map(k=>+k[3]),
+        C=klines.map(k=>+k[4]),V=klines.map(k=>+k[5]);
+  const n=C.length;
+
+  const e50=ema(C,50), e200=ema(C,200);
+  const bull = e50[n-1]>e200[n-1];
+  const rsi  = calcRSI(C.slice(-30));
+  const stch = calcStoch(H.slice(-80),L.slice(-80),C.slice(-80));
+
+  // ATR actual vs promedio 50
+  const atrArr   = atrSeries(H,L,C,14);
+  const atrNow   = atrArr[atrArr.length-1];
+  const atrAvg50 = atrArr.slice(-50).reduce((a,b)=>a+b,0)/Math.min(50,atrArr.length);
+
+  // Volumen
+  const volNow  = V[n-1];
+  const volAvg20= V.slice(-21,-1).reduce((a,b)=>a+b,0)/20;
+
+  // Rango 20 velas
+  const h20=Math.max(...H.slice(-20)), l20=Math.min(...L.slice(-20));
+  const range20 = (h20-l20)/l20;
+
+  // Filtros
+  const fVol   = volNow > volAvg20*1.2;
+  const fATR   = atrNow >= atrAvg50*0.8;
+  const fRange = range20 >= 0.05;
+
+  // S/R zonas (últimas 300 velas)
+  const zones = findSR(H.slice(-300),L.slice(-300));
+  const price = C[n-1];
+  const zone  = zones.find(z=>Math.abs(price-z.price)/price<=0.01);
+
+  // Vela de rechazo
+  const wickBuy  = hasWick(O[n-1],H[n-1],L[n-1],C[n-1],'buy');
+  const wickSell = hasWick(O[n-1],H[n-1],L[n-1],C[n-1],'sell');
+
+  // Stoch crossover
+  const xBuy  = stch.K>stch.D && stch.Kp<=stch.Dp && stch.K<25 && stch.D<25;
+  const xSell = stch.K<stch.D && stch.Kp>=stch.Dp && stch.K>75 && stch.D>75;
+
+  // Condiciones
+  const cB=[bull, !!zone, rsi<35,  xBuy,  wickBuy];
+  const cS=[!bull,!!zone, rsi>65,  xSell, wickSell];
+  const buyOk  = cB.every(Boolean) && fVol && fATR && fRange;
+  const sellOk = cS.every(Boolean) && fVol && fATR && fRange;
+
+  // Niveles
+  let sl,tp1,tp2;
+  const zp = zone ? zone.price : price;
+  if(buyOk){ const R=price-(zp-atrNow); sl=zp-atrNow; tp1=price+1.5*R; tp2=price+3*R; }
+  if(sellOk){ const R=(zp+atrNow)-price; sl=zp+atrNow; tp1=price-1.5*R; tp2=price-3*R; }
+
+  return {symbol,price,bull,rsi,stch,atrNow,atrAvg50,fVol,fATR,fRange,
+          zone,zones:zones.length,buyOk,sellOk,cB,cS,sl,tp1,tp2,
+          filtersOk:fVol&&fATR&&fRange};
+}
+
+// ── Render ────────────────────────────────────────────────────
+function fmt(n,d=2){ return n!=null?n.toFixed(d):'—'; }
+function fmtP(n){
+  if(n==null)return '—';
+  return n>=1000?n.toFixed(2):n>=1?n.toFixed(4):n.toFixed(6);
+}
+
+function renderRow(d){
+  const pair=d.symbol.replace('USDT','');
+  const sc = d.buyOk?'signal-buy':d.sellOk?'signal-sell':'signal-none';
+  const trend = d.bull
+    ? `<span class="trend-bull">▲ BULL</span>`
+    : `<span class="trend-bear">▼ BEAR</span>`;
+  const rsiCls = (d.rsi<35||d.rsi>65)?'ok':'neutral';
+  const stochTxt = `K:${fmt(d.stch.K,1)}<br>D:${fmt(d.stch.D,1)}`;
+  const stochCls = (d.stch.K<25||d.stch.K>75)?'ok':'neutral';
+  const conds = d.buyOk?d.cB:d.cS;
+  const ct = d.sellOk?'sell-met':'met';
+  const dots = conds.map(c=>`<div class="cond-dot ${c?ct:''}"></div>`).join('');
+  let sig=`<span class="badge wait">ESPERA</span>`;
+  let tp='';
+  if(d.buyOk){
+    sig=`<span class="badge buy">▲ BUY</span>`;
+    tp=`<div class="tp-info"><span class="tp1">TP1 ${fmtP(d.tp1)}</span><br><span class="tp2">TP2 ${fmtP(d.tp2)}</span><br><span class="sl">SL  ${fmtP(d.sl)}</span></div>`;
+  } else if(d.sellOk){
+    sig=`<span class="badge sell">▼ SELL</span>`;
+    tp=`<div class="tp-info"><span class="tp1">TP1 ${fmtP(d.tp1)}</span><br><span class="tp2">TP2 ${fmtP(d.tp2)}</span><br><span class="sl">SL  ${fmtP(d.sl)}</span></div>`;
+  }
+  return `<div class="row ${sc}">
+    <div class="pair">${pair}</div>
+    <div class="price">${fmtP(d.price)}</div>
+    <div>${trend}</div>
+    <div class="val ${rsiCls}">${fmt(d.rsi,1)}</div>
+    <div class="val ${stochCls}">${stochTxt}</div>
+    <div class="val ${d.fVol?'ok':'warn'}">${d.fVol?'✓':'✗'}</div>
+    <div class="val ${d.fATR&&d.fRange?'ok':'warn'}">${d.fATR&&d.fRange?'✓':'✗'}</div>
+    <div><div class="cond-dots">${dots}</div></div>
+    <div>${sig}${tp}</div>
+  </div>`;
+}
+
+// ── Scan principal ────────────────────────────────────────────
+async function runScan(){
+  if(scanning)return;
+  scanning=true;
+  document.getElementById('alert-banner').style.display='none';
+  const btn=document.getElementById('scan-btn');
+  btn.disabled=true; btn.textContent='⟳ Escaneando...';
+  setStatus('Conectando...', true);
+  document.getElementById('results').innerHTML=
+    `<div class="loading-row"><span class="spinner"></span>Analizando ${PAIRS.length} pares en 4H con proxy: <strong>${currentProxy}</strong>…</div>`;
+
+  let buys=0,sells=0,filtersOk=0,errors=0;
+  const rows=[];
+
+  for(const sym of PAIRS){
+    try{
+      log(`Analizando ${sym}…`);
+      const d=await analyze(sym);
+      if(d.filtersOk)filtersOk++;
+      if(d.buyOk){ buys++; log(`✔ SEÑAL BUY → ${sym} | TP1:${fmtP(d.tp1)} TP2:${fmtP(d.tp2)} SL:${fmtP(d.sl)}`,'buy'); }
+      else if(d.sellOk){ sells++; log(`✔ SEÑAL SELL → ${sym} | TP1:${fmtP(d.tp1)} TP2:${fmtP(d.tp2)} SL:${fmtP(d.sl)}`,'sell'); }
+      rows.push({sig:d.buyOk||d.sellOk, html:renderRow(d)});
+    } catch(e){
+      errors++;
+      log(`✗ Error ${sym}: ${e.message}`,'warn');
+      rows.push({sig:false, html:`<div class="row signal-none"><div class="pair">${sym.replace('USDT','')}</div><div class="error-cell" style="grid-column:2/10">Error al obtener datos — ${e.message.slice(0,60)}</div></div>`});
+    }
+    await new Promise(r=>setTimeout(r,250));
+  }
+
+  rows.sort((a,b)=>b.sig-a.sig);
+  document.getElementById('results').innerHTML=rows.map(r=>r.html).join('');
+  document.getElementById('cnt-buy').textContent=buys;
+  document.getElementById('cnt-sell').textContent=sells;
+  document.getElementById('cnt-total').textContent=(PAIRS.length-errors)+'/'+PAIRS.length;
+  document.getElementById('cnt-filter').textContent=filtersOk;
+  document.getElementById('last-scan').textContent=
+    `Último: ${new Date().toLocaleTimeString('es',{hour12:false})}`;
+
+  if(errors===PAIRS.length){
+    document.getElementById('alert-banner').style.display='block';
+  }
+
+  setStatus('Listo',false);
+  log(`Scan completo ✓  BUY:${buys} SELL:${sells} Errores:${errors}`);
+  btn.disabled=false; btn.textContent='▶ Escanear';
+  scanning=false;
+}
+</script>
+</body>
+</html>
